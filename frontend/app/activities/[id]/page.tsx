@@ -1,7 +1,7 @@
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
-import { photoUrl } from "@/lib/api";
-import { MOCK_SETTINGS, MOCK_ACTIVITIES } from "@/lib/mockData";
+import { api } from "@/lib/api";
+import type { SiteSettings } from "@/lib/types";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
@@ -11,8 +11,11 @@ const MONTHS = ["January","February","March","April","May","June",
   "July","August","September","October","November","December"];
 
 export default async function ActivityDetailPage({ params }: { params: { id: string } }) {
-  const s = MOCK_SETTINGS;
-  const activity = MOCK_ACTIVITIES.find((a) => a.id === params.id) ?? MOCK_ACTIVITIES[0];
+  const [s, activity] = await Promise.all([
+    api.settings().catch((): SiteSettings => ({ church_name: "Ona-Igbala Baptist Church" })),
+    api.activityDetail(params.id).catch(() => null),
+  ]);
+
   if (!activity) notFound();
 
   const start = new Date(activity.start_at);

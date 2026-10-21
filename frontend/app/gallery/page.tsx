@@ -2,21 +2,27 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import PageHeader from "@/components/PageHeader";
 import Link from "next/link";
-import { MOCK_SETTINGS, MOCK_GALLERY_ALBUMS } from "@/lib/mockData";
+import { api } from "@/lib/api";
+import type { SiteSettings } from "@/lib/types";
 
 export const revalidate = 600;
 
 export default async function GalleryPage({
   searchParams,
 }: { searchParams: { year?: string } }) {
-  const s = MOCK_SETTINGS;
   const year = searchParams.year ? Number(searchParams.year) : undefined;
+
+  const [s, allAlbums] = await Promise.all([
+    api.settings().catch((): SiteSettings => ({ church_name: "Ona-Igbala Baptist Church" })),
+    api.gallery().catch(() => []),
+  ]);
+
   const albums = year
-    ? MOCK_GALLERY_ALBUMS.filter((a) => a.album_date && new Date(a.album_date).getFullYear() === year)
-    : MOCK_GALLERY_ALBUMS;
+    ? allAlbums.filter((a) => a.album_date && new Date(a.album_date).getFullYear() === year)
+    : allAlbums;
 
   const years = Array.from(new Set(
-    MOCK_GALLERY_ALBUMS.map((a) => a.album_date ? new Date(a.album_date).getFullYear() : null).filter(Boolean)
+    allAlbums.map((a) => a.album_date ? new Date(a.album_date).getFullYear() : null).filter(Boolean)
   )).sort((a, b) => (b as number) - (a as number));
 
   return (
@@ -25,7 +31,6 @@ export default async function GalleryPage({
       <main className="bg-mist min-h-screen">
         <PageHeader title="Church Gallery" max="max-w-5xl" />
         <div className="mx-auto max-w-5xl px-4 py-8">
-          {/* Year filter */}
           <div className="flex gap-2 flex-wrap mb-8">
             <Link href="/gallery"
               className={`rounded-full px-4 py-1.5 text-sm font-medium border ${!year ? "bg-navy text-white border-navy" : "bg-white border-rule text-steel hover:border-navy"}`}>
@@ -38,7 +43,7 @@ export default async function GalleryPage({
               </Link>
             ))}
           </div>
-
+          {albums.length === 0 && <p className="text-center py-12 text-gray-400">No albums yet.</p>}
           <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3">
             {albums.map((a) => (
               <Link key={a.id} href={`/gallery/${a.id}`}

@@ -1,14 +1,21 @@
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import Link from "next/link";
-import { MOCK_SETTINGS, MOCK_GALLERY_ALBUMS, MOCK_ALBUM_MEDIA } from "@/lib/mockData";
+import { api } from "@/lib/api";
+import type { SiteSettings } from "@/lib/types";
+import { notFound } from "next/navigation";
 
 export const revalidate = 600;
 
 export default async function AlbumPage({ params }: { params: { id: string } }) {
-  const s = MOCK_SETTINGS;
-  const album = MOCK_GALLERY_ALBUMS.find((a) => a.id === params.id) ?? MOCK_GALLERY_ALBUMS[0];
-  const media = MOCK_ALBUM_MEDIA(album.id);
+  const [s, albums, media] = await Promise.all([
+    api.settings().catch((): SiteSettings => ({ church_name: "Ona-Igbala Baptist Church" })),
+    api.gallery().catch(() => []),
+    api.albumMedia(params.id).catch(() => []),
+  ]);
+
+  const album = albums.find((a) => a.id === params.id);
+  if (!album) notFound();
 
   return (
     <>
@@ -26,13 +33,12 @@ export default async function AlbumPage({ params }: { params: { id: string } }) 
               </p>
             )}
           </div>
+          {media.length === 0 && <p className="text-center py-12 text-gray-400">No photos in this album yet.</p>}
           <div className="columns-2 md:columns-3 gap-3 space-y-3">
             {media.map((item) => (
               <div key={item.id} className="break-inside-avoid">
                 <img src={item.file_path} alt={item.caption ?? ""} className="w-full rounded" />
-                {item.caption && (
-                  <p className="text-xs text-gray-500 mt-1 px-1">{item.caption}</p>
-                )}
+                {item.caption && <p className="text-xs text-gray-500 mt-1 px-1">{item.caption}</p>}
               </div>
             ))}
           </div>

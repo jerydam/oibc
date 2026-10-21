@@ -3,7 +3,8 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import PageHeader from "@/components/PageHeader";
 import Link from "next/link";
-import { MOCK_SETTINGS, MOCK_CURRENT_MONTHLY_WORD, MOCK_MONTHLY_WORD_ARCHIVE } from "@/lib/mockData";
+import { api } from "@/lib/api";
+import type { SiteSettings } from "@/lib/types";
 
 export const revalidate = 3600;
 
@@ -11,44 +12,52 @@ const MONTHS = ["January","February","March","April","May","June",
   "July","August","September","October","November","December"];
 
 export default async function MonthlyWordPage() {
-  const s = MOCK_SETTINGS;
-  const current = MOCK_CURRENT_MONTHLY_WORD;
-  const archive = MOCK_MONTHLY_WORD_ARCHIVE;
-  const embedUrl = videoEmbedUrl(current?.video_url);
+  const [s, current, archive] = await Promise.all([
+    api.settings().catch((): SiteSettings => ({ church_name: "Ona-Igbala Baptist Church" })),
+    api.currentMonthlyWord().catch(() => null),
+    api.monthlyWordArchive().catch(() => []),
+  ]);
+
+  if (!current) {
+    return (
+      <>
+        <SiteHeader name={s.church_name} />
+        <main className="bg-mist min-h-screen">
+          <PageHeader title="Monthly Word &amp; Prayer" max="max-w-4xl" />
+          <p className="text-center py-20 text-gray-400">No monthly word published yet.</p>
+        </main>
+        <SiteFooter s={s} />
+      </>
+    );
+  }
+
+  const embedUrl = videoEmbedUrl(current.video_url);
 
   return (
     <>
       <SiteHeader name={s.church_name} />
       <main className="bg-mist min-h-screen">
         <PageHeader title="Monthly Word &amp; Prayer" sub="Stay connected to God's Word and grow in prayer throughout the month." max="max-w-4xl" />
-
         <div className="mx-auto max-w-4xl px-4 py-10">
           <div className="grid lg:grid-cols-5 gap-10">
-            {/* Video + main content */}
             <div className="lg:col-span-3 space-y-6">
               <div>
                 <p className="text-royal font-medium text-sm mb-1">{MONTHS[current.month - 1]} {current.year}</p>
                 <h2 className="font-display text-2xl text-ink">{current.title}</h2>
                 {current.pastor_name && <p className="text-sm text-gray-500 mt-1">— {current.pastor_name}</p>}
               </div>
-
               {embedUrl && (
                 <div className="aspect-video rounded-lg overflow-hidden bg-black shadow-md">
                   <iframe src={embedUrl} title={current.title} className="w-full h-full" allowFullScreen
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" />
                 </div>
               )}
-
               {!embedUrl && current.thumbnail_path && (
                 <div className="aspect-video rounded-lg overflow-hidden bg-steel shadow-md">
                   <img src={current.thumbnail_path} alt={current.title} className="w-full h-full object-cover" />
                 </div>
               )}
-
-              {current.message_description && (
-                <p className="text-gray-700 leading-relaxed">{current.message_description}</p>
-              )}
-
+              {current.message_description && <p className="text-gray-700 leading-relaxed">{current.message_description}</p>}
               {current.scripture_reference && (
                 <div className="bg-steel/10 rounded p-4">
                   <p className="text-xs font-medium text-steel mb-1">Key Scripture</p>
@@ -56,8 +65,6 @@ export default async function MonthlyWordPage() {
                 </div>
               )}
             </div>
-
-            {/* Prayer sidebar */}
             <div className="lg:col-span-2 space-y-6">
               {current.prayer_focus && (
                 <div className="bg-white rounded-lg border border-rule p-5">
@@ -81,7 +88,6 @@ export default async function MonthlyWordPage() {
             </div>
           </div>
 
-          {/* Archive */}
           {archive.length > 1 && (
             <div className="mt-14">
               <h2 className="font-display text-xl text-ink mb-4">Past Messages</h2>

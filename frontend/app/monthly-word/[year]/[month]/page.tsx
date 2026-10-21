@@ -2,7 +2,8 @@ import { videoEmbedUrl } from "@/lib/api";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import Link from "next/link";
-import { MOCK_SETTINGS, MOCK_MONTHLY_WORD_ARCHIVE } from "@/lib/mockData";
+import { api } from "@/lib/api";
+import type { SiteSettings } from "@/lib/types";
 import { notFound } from "next/navigation";
 
 export const revalidate = 3600;
@@ -13,10 +14,11 @@ const MONTHS = ["January","February","March","April","May","June",
 export default async function MWPEditionPage({
   params,
 }: { params: { year: string; month: string } }) {
-  const s = MOCK_SETTINGS;
-  const ed = MOCK_MONTHLY_WORD_ARCHIVE.find(
-    (m) => m.year === Number(params.year) && m.month === Number(params.month)
-  ) ?? MOCK_MONTHLY_WORD_ARCHIVE[0];
+  const [s, ed] = await Promise.all([
+    api.settings().catch((): SiteSettings => ({ church_name: "Ona-Igbala Baptist Church" })),
+    api.monthlyWordByDate(Number(params.year), Number(params.month)).catch(() => null),
+  ]);
+
   if (!ed) notFound();
 
   const embedUrl = videoEmbedUrl(ed.video_url);

@@ -1,19 +1,19 @@
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import PageHeader from "@/components/PageHeader";
-import { MOCK_SETTINGS } from "@/lib/mockData";
+import { api } from "@/lib/api";
+import type { SiteSettings } from "@/lib/types";
 
 export const revalidate = 3600;
 
 export default async function ContactPage() {
-  const s = MOCK_SETTINGS;
+  const s = await api.settings().catch((): SiteSettings => ({ church_name: "Ona-Igbala Baptist Church" }));
 
   return (
     <>
       <SiteHeader name={s.church_name} />
       <main className="bg-mist min-h-screen">
         <PageHeader title="Contact Us" max="max-w-3xl" />
-
         <div className="mx-auto max-w-3xl px-4 py-10 grid md:grid-cols-2 gap-10">
           <div className="space-y-6">
             {s.address && (
@@ -33,7 +33,6 @@ export default async function ContactPage() {
               <p className="text-sm text-gray-600">For general enquiries, membership, or pastoral matters, please use the form or speak with any of our church workers after a service.</p>
             </div>
           </div>
-
           <div className="bg-white rounded-lg border border-rule p-6">
             <h2 className="font-display text-xl text-ink mb-4">Send a message</h2>
             <form className="space-y-4" action="#" method="POST">

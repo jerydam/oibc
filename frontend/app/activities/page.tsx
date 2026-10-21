@@ -2,7 +2,8 @@ import Link from "next/link";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import PageHeader from "@/components/PageHeader";
-import { MOCK_SETTINGS, MOCK_ACTIVITIES } from "@/lib/mockData";
+import { api } from "@/lib/api";
+import type { SiteSettings } from "@/lib/types";
 
 export const revalidate = 300;
 
@@ -31,18 +32,16 @@ export default async function ActivitiesPage({
   const month = searchParams.month ? Number(searchParams.month) : undefined;
   const category = searchParams.category;
 
-  const s = MOCK_SETTINGS;
+  const params: Record<string, string> = { year: String(year) };
+  if (month) params.month = String(month);
+  if (category) params.category = category;
 
-  let activities = MOCK_ACTIVITIES.filter((a) => {
-    const d = new Date(a.start_at);
-    if (d.getFullYear() !== year) return false;
-    if (month && d.getMonth() + 1 !== month) return false;
-    if (category && a.category !== category) return false;
-    return true;
-  });
-  if (activities.length === 0) activities = MOCK_ACTIVITIES;
+  const [s, activities] = await Promise.all([
+    api.settings().catch((): SiteSettings => ({ church_name: "Ona-Igbala Baptist Church" })),
+    api.activities(params).catch(() => []),
+  ]);
 
-  const allCategories = Array.from(new Set(MOCK_ACTIVITIES.map((a) => a.category).filter(Boolean)));
+  const allCategories = Array.from(new Set(activities.map((a) => a.category).filter(Boolean)));
 
   return (
     <>
@@ -67,6 +66,7 @@ export default async function ActivitiesPage({
             <button type="submit" className="rounded-full bg-navy text-white px-5 py-2 text-sm font-bold">Filter</button>
           </form>
           <div className="space-y-4">
+            {activities.length === 0 && <p className="text-center py-12 text-gray-400">No activities found.</p>}
             {activities.map((a) => (
               <div key={a.id} className="bg-white rounded-lg border border-rule p-5 flex gap-5 items-start">
                 <div className="shrink-0 w-16 text-center">

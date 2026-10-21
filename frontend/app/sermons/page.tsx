@@ -1,15 +1,16 @@
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import PageHeader from "@/components/PageHeader";
-import { videoEmbedUrl } from "@/lib/api";
-import { MOCK_SETTINGS, MOCK_SERMONS } from "@/lib/mockData";
-import Link from "next/link";
+import { api, videoEmbedUrl } from "@/lib/api";
+import type { SiteSettings } from "@/lib/types";
 
 export const revalidate = 600;
 
 export default async function SermonsPage() {
-  const s = MOCK_SETTINGS;
-  const sermons = MOCK_SERMONS;
+  const [s, sermons] = await Promise.all([
+    api.settings().catch((): SiteSettings => ({ church_name: "Ona-Igbala Baptist Church" })),
+    api.sermons().catch(() => []),
+  ]);
 
   return (
     <>
@@ -17,6 +18,7 @@ export default async function SermonsPage() {
       <main className="bg-mist min-h-screen">
         <PageHeader title="Sermons" sub="Listen to recent messages from our pulpit." max="max-w-4xl" />
         <div className="mx-auto max-w-4xl px-4 py-8 space-y-6">
+          {sermons.length === 0 && <p className="text-center py-12 text-gray-400">No sermons published yet.</p>}
           {sermons.map((sermon) => {
             const embed = videoEmbedUrl(sermon.video_url);
             return (
@@ -35,12 +37,8 @@ export default async function SermonsPage() {
                     {sermon.preacher_name}
                     {sermon.sermon_date && ` · ${new Date(sermon.sermon_date).toLocaleDateString("en-NG", { day:"numeric", month:"long", year:"numeric" })}`}
                   </p>
-                  {sermon.scripture_reference && (
-                    <p className="text-xs text-royal mt-1">{sermon.scripture_reference}</p>
-                  )}
-                  {sermon.description && (
-                    <p className="text-sm text-gray-600 mt-2 line-clamp-3">{sermon.description}</p>
-                  )}
+                  {sermon.scripture_reference && <p className="text-xs text-royal mt-1">{sermon.scripture_reference}</p>}
+                  {sermon.description && <p className="text-sm text-gray-600 mt-2 line-clamp-3">{sermon.description}</p>}
                   {embed && (
                     <a href={sermon.video_url!} target="_blank" rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 mt-3 text-sm font-semibold text-royal hover:underline">

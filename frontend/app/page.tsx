@@ -9,29 +9,22 @@ import MonthlyBirthdays from "@/components/MonthlyBirthdays";
 import UpcomingActivities from "@/components/UpcomingActivities";
 import MonthlyWordSection from "@/components/MonthlyWordSection";
 import AnnouncementsSection from "@/components/AnnouncementsSection";
-import {
-  MOCK_SETTINGS,
-  MOCK_TODAY_CELEBRANTS,
-  MOCK_WEEK_CELEBRANTS,
-  MOCK_MONTH_CELEBRANTS,
-  MOCK_ACTIVITIES,
-  MOCK_CURRENT_MONTHLY_WORD,
-  MOCK_ANNOUNCEMENTS,
-} from "@/lib/mockData";
+import { api } from "@/lib/api";
+import type { SiteSettings } from "@/lib/types";
 
 export const revalidate = 300;
 
 export default async function HomePage() {
   const now = new Date();
-  const s = MOCK_SETTINGS;
-  const today = MOCK_TODAY_CELEBRANTS;
-  const week = MOCK_WEEK_CELEBRANTS;
-  const month = MOCK_MONTH_CELEBRANTS;
-  const upcoming = MOCK_ACTIVITIES.filter(
-    (a) => new Date(a.start_at) >= now
-  ).slice(0, 6);
-  const mwp = MOCK_CURRENT_MONTHLY_WORD;
-  const announcements = MOCK_ANNOUNCEMENTS;
+  const [s, today, week, month, upcoming, mwp, announcements] = await Promise.all([
+    api.settings().catch((): SiteSettings => ({ church_name: "Ona-Igbala Baptist Church" })),
+    api.todayCelebrants().catch(() => []),
+    api.weekCelebrants().catch(() => []),
+    api.monthCelebrants().catch(() => []),
+    api.upcomingActivities(6).catch(() => []),
+    api.currentMonthlyWord().catch(() => null),
+    api.announcements().catch(() => []),
+  ]);
 
   return (
     <>
