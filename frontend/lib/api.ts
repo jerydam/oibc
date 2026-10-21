@@ -97,14 +97,57 @@ export function adminApi(token: string) {
   return {
     overview: () => adm("/overview").then((r) => r.json()),
 
-    // Members
+    // ── Members ──────────────────────────────────────────────
+
     members: (params?: Record<string, string>) =>
       adm("/members?" + new URLSearchParams(params ?? {})).then((r) => r.json()),
 
-    // Birthdays (admin overview reused)
+    getMember: (id: string) =>
+      adm(`/members/${id}`).then((r) => r.json()),
+
+    createMember: (data: {
+      full_name: string;
+      preferred_display_name?: string;
+      email?: string;
+      phone?: string;
+      date_of_birth?: string;
+      address?: string;
+      date_joined?: string;
+      membership_status?: string;
+    }) =>
+      adm("/members", { method: "POST", body: JSON.stringify(data) }).then((r) => r.json()),
+
+    updateMember: (id: string, data: object) =>
+      adm(`/members/${id}`, { method: "PATCH", body: JSON.stringify(data) }).then((r) => r.json()),
+
+    /**
+     * Invite a new member by email — creates the member record and sends a
+     * Supabase magic-link / invite email so they can set up their login.
+     */
+    inviteMember: (data: {
+      full_name: string;
+      email: string;
+      preferred_display_name?: string;
+      phone?: string;
+      role_name?: string;
+    }) =>
+      adm("/members/invite", { method: "POST", body: JSON.stringify(data) }).then((r) => r.json()),
+
+    // ── Roles ────────────────────────────────────────────────
+
+    listRoles: () =>
+      adm("/roles").then((r) => r.json()),
+
+    assignRole: (memberId: string, roleName: string) =>
+      adm(`/members/${memberId}/role`, {
+        method: "PATCH",
+        body: JSON.stringify({ role_name: roleName }),
+      }).then((r) => r.json()),
+
+    // ── Birthdays ─────────────────────────────────────────────
     birthdayOverview: () => adm("/birthdays/overview").then((r) => r.json()),
 
-    // Photo submissions
+    // ── Photo submissions ─────────────────────────────────────
     pendingPhotos: () =>
       fetch(`${BASE}/admin/photo-submissions?status=pending`, { headers: h }).then((r) => r.json()),
     reviewPhoto: (id: string, approve: boolean, notes?: string) =>
@@ -113,7 +156,7 @@ export function adminApi(token: string) {
         body: JSON.stringify({ approve, notes: notes ?? null }),
       }).then((r) => r.json()),
 
-    // Registrations
+    // ── Registrations ─────────────────────────────────────────
     pendingRegistrations: () =>
       fetch(`${BASE}/admin/registrations?status=pending`, { headers: h }).then((r) => r.json()),
     approveRegistration: (id: string) =>
@@ -121,7 +164,7 @@ export function adminApi(token: string) {
     rejectRegistration: (id: string, reason?: string) =>
       adm(`/registrations/${id}/reject`, { method: "POST" }).then((r) => r.json()),
 
-    // Activities
+    // ── Activities ────────────────────────────────────────────
     activities: (params?: Record<string, string>) =>
       adm("/activities?" + new URLSearchParams(params ?? {})).then((r) => r.json()),
     createSeries: (data: object) =>
@@ -135,14 +178,14 @@ export function adminApi(token: string) {
     submitReport: (id: string, data: object) =>
       adm(`/activities/occurrences/${id}/report`, { method: "POST", body: JSON.stringify(data) }).then((r) => r.json()),
 
-    // Monthly Word
+    // ── Monthly Word ──────────────────────────────────────────
     monthlyWordList: () => adm("/monthly-word").then((r) => r.json()),
     createMonthlyWord: (data: object) =>
       adm("/monthly-word", { method: "POST", body: JSON.stringify(data) }).then((r) => r.json()),
     updateMonthlyWord: (id: string, data: object) =>
       adm(`/monthly-word/${id}`, { method: "PATCH", body: JSON.stringify(data) }).then((r) => r.json()),
 
-    // Sermons
+    // ── Sermons ───────────────────────────────────────────────
     sermonList: () => adm("/sermons").then((r) => r.json()),
     createSermon: (data: object) =>
       adm("/sermons", { method: "POST", body: JSON.stringify(data) }).then((r) => r.json()),
@@ -151,14 +194,14 @@ export function adminApi(token: string) {
     archiveSermon: (id: string) =>
       adm(`/sermons/${id}`, { method: "DELETE" }).then((r) => r.json()),
 
-    // Announcements
+    // ── Announcements ─────────────────────────────────────────
     announcementList: () => adm("/announcements").then((r) => r.json()),
     createAnnouncement: (data: object) =>
       adm("/announcements", { method: "POST", body: JSON.stringify(data) }).then((r) => r.json()),
     updateAnnouncement: (id: string, data: object) =>
       adm(`/announcements/${id}`, { method: "PATCH", body: JSON.stringify(data) }).then((r) => r.json()),
 
-    // Departments
+    // ── Departments ───────────────────────────────────────────
     departmentList: () => adm("/departments").then((r) => r.json()),
     createDepartment: (name: string, description?: string, meeting_schedule?: string) =>
       adm(
@@ -166,7 +209,7 @@ export function adminApi(token: string) {
         { method: "POST" }
       ).then((r) => r.json()),
 
-    // Visitors
+    // ── Visitors ──────────────────────────────────────────────
     visitors: (status?: string) =>
       adm("/visitors" + (status ? `?status=${status}` : "")).then((r) => r.json()),
     updateVisitorStatus: (id: string, status: string) =>

@@ -93,9 +93,22 @@ export interface Member {
   date_of_birth?: string;
   phone?: string;
   email?: string;
+  address?: string;
+  date_joined?: string;
   membership_status: string;
+  /** Role in the church system (maps to profiles.role_id → roles.name) */
+  role?: string;
   profile_photo_path: string | null;
   profile_photo_status: string | null;
+  /** true when this member has a linked login account */
+  has_login?: boolean;
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  description: string | null;
+  permissions: string[];
 }
 
 export interface AdminOverview {

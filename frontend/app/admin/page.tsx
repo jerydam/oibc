@@ -78,22 +78,35 @@ function OverviewPanel({ overview }: { overview: AdminOverview }) {
 
 // ── Members ───────────────────────────────────────────────────
 
+const EMPTY_ADD = {
+  full_name: "", preferred_display_name: "", email: "",
+  phone: "", date_of_birth: "", date_joined: "", membership_status: "active",
+};
+const EMPTY_INVITE = { full_name: "", email: "", preferred_display_name: "", phone: "" };
+
 function MembersPanel() {
+  const [tab, setTab] = useState<"list" | "add">("list");
   const [members, setMembers] = useState<Member[]>(MOCK_MEMBERS);
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<Member | null>(null);
   const [form, setForm] = useState<Partial<Member>>({});
   const [toast, setToast] = useState("");
 
+  // Add-without-login form
+  const [addForm, setAddForm] = useState(EMPTY_ADD);
+  const [addErr, setAddErr]   = useState("");
+
+  // Invite-by-email form
+  const [inviteForm, setInviteForm] = useState(EMPTY_INVITE);
+  const [inviteErr, setInviteErr]   = useState("");
+  const [inviteDone, setInviteDone] = useState(false);
+
   const filtered = members.filter(m =>
     m.full_name.toLowerCase().includes(q.toLowerCase()) ||
     m.member_number.includes(q)
   );
 
-  function openEdit(m: Member) {
-    setEditing(m);
-    setForm({ ...m });
-  }
+  function openEdit(m: Member) { setEditing(m); setForm({ ...m }); }
 
   function save() {
     setMembers(prev => prev.map(m => m.id === editing!.id ? { ...m, ...form } as Member : m));
@@ -101,88 +114,276 @@ function MembersPanel() {
     setToast("Member updated.");
   }
 
+  function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    setAddErr("");
+    if (!addForm.full_name.trim()) { setAddErr("Full name is required."); return; }
+    const newMember: Member = {
+      id: uid(),
+      member_number: "M-" + String(members.length + 1).padStart(4, "0"),
+      full_name: addForm.full_name.trim(),
+      preferred_display_name: addForm.preferred_display_name || addForm.full_name.trim(),
+      email: addForm.email || null,
+      phone: addForm.phone || null,
+      date_of_birth: addForm.date_of_birth || null,
+      date_joined: addForm.date_joined || null,
+      membership_status: addForm.membership_status,
+      profile_photo_path: null,
+      profile_photo_status: null,
+      role: null,
+      has_login: false,
+    } as unknown as Member;
+    setMembers(prev => [newMember, ...prev]);
+    setAddForm(EMPTY_ADD);
+    setToast("Member added.");
+    setTab("list");
+  }
+
+  function handleInvite(e: React.FormEvent) {
+    e.preventDefault();
+    setInviteErr(""); setInviteDone(false);
+    if (!inviteForm.full_name.trim() || !inviteForm.email.trim()) {
+      setInviteErr("Full name and email are required."); return;
+    }
+    // Mock: create the member record and flag has_login=true (invite sent)
+    const newMember: Member = {
+      id: uid(),
+      member_number: "M-" + String(members.length + 1).padStart(4, "0"),
+      full_name: inviteForm.full_name.trim(),
+      preferred_display_name: inviteForm.preferred_display_name || inviteForm.full_name.trim(),
+      email: inviteForm.email,
+      phone: inviteForm.phone || null,
+      date_of_birth: null, date_joined: null,
+      membership_status: "active",
+      profile_photo_path: null, profile_photo_status: null,
+      role: "member", has_login: true,
+    } as unknown as Member;
+    setMembers(prev => [newMember, ...prev]);
+    setInviteForm(EMPTY_INVITE);
+    setInviteDone(true);
+  }
+
   const STATUS_BADGE: Record<string, string> = {
-    active:   "bg-green-100 text-green-800",
-    pending:  "bg-yellow-100 text-yellow-800",
-    inactive: "bg-gray-100 text-gray-500",
+    active:      "bg-green-100 text-green-800",
+    pending:     "bg-yellow-100 text-yellow-800",
+    inactive:    "bg-gray-100 text-gray-500",
+    transferred: "bg-blue-100 text-blue-800",
+    deceased:    "bg-red-100 text-red-700",
   };
 
   return (
     <div>
       {toast && <Toast msg={toast} onDone={() => setToast("")} />}
-      <h2 className="font-display text-2xl text-ink mb-4">Members</h2>
 
-      <input value={q} onChange={e => setQ(e.target.value)}
-        placeholder="Search by name or member number…"
-        className={`${inp} mb-4`} />
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-display text-2xl text-ink">Members</h2>
+        {tab === "list" && (
+          <span className="text-sm text-gray-400">{members.length} records</span>
+        )}
+      </div>
 
-      {/* Edit modal */}
-      {editing && (
-        <div className="fixed inset-0 z-40 bg-black/40 grid place-items-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-            <h3 className="font-display text-lg text-ink mb-4">Edit Member</h3>
-            <div className="grid gap-4">
-              <FormField label="Full Name *">
-                <input className={inp} value={form.full_name ?? ""} onChange={e => setForm({...form, full_name: e.target.value})} />
-              </FormField>
-              <FormField label="Display Name">
-                <input className={inp} value={form.preferred_display_name ?? ""} onChange={e => setForm({...form, preferred_display_name: e.target.value})} />
-              </FormField>
-              <FormField label="Status">
-                <select className={`${inp} bg-white`} value={form.membership_status ?? "active"} onChange={e => setForm({...form, membership_status: e.target.value})}>
-                  <option value="active">Active</option>
-                  <option value="pending">Pending</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </FormField>
-              <FormField label="Profile Photo URL">
-                <input className={inp} placeholder="https://…" value={form.profile_photo_path ?? ""} onChange={e => setForm({...form, profile_photo_path: e.target.value || null})} />
-              </FormField>
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 border-b border-rule">
+        {(["list", "add"] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-4 py-2 text-sm font-medium rounded-t transition-colors
+              ${tab === t
+                ? "bg-white border border-b-white border-rule -mb-px text-ink"
+                : "text-gray-500 hover:text-ink"}`}>
+            {t === "list" ? "Members" : "Add / Invite"}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Tab: Members list ── */}
+      {tab === "list" && (
+        <>
+          <input value={q} onChange={e => setQ(e.target.value)}
+            placeholder="Search by name or member number…"
+            className={`${inp} mb-4`} />
+
+          {/* Edit modal */}
+          {editing && (
+            <div className="fixed inset-0 z-40 bg-black/40 grid place-items-center p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+                <h3 className="font-display text-lg text-ink mb-4">Edit Member</h3>
+                <div className="grid gap-4">
+                  <FormField label="Full Name *">
+                    <input className={inp} value={form.full_name ?? ""} onChange={e => setForm({...form, full_name: e.target.value})} />
+                  </FormField>
+                  <FormField label="Display Name">
+                    <input className={inp} value={form.preferred_display_name ?? ""} onChange={e => setForm({...form, preferred_display_name: e.target.value})} />
+                  </FormField>
+                  <FormField label="Status">
+                    <select className={`${inp} bg-white`} value={form.membership_status ?? "active"} onChange={e => setForm({...form, membership_status: e.target.value})}>
+                      {["active","pending","inactive","transferred","deceased"].map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </FormField>
+                  <FormField label="Profile Photo URL">
+                    <input className={inp} placeholder="https://…" value={form.profile_photo_path ?? ""} onChange={e => setForm({...form, profile_photo_path: e.target.value || null})} />
+                  </FormField>
+                </div>
+                <div className="flex justify-end gap-3 mt-5">
+                  <button className={btn.ghost} onClick={() => setEditing(null)}>Cancel</button>
+                  <button className={btn.primary} onClick={save}>Save Changes</button>
+                </div>
+              </div>
             </div>
-            <div className="flex justify-end gap-3 mt-5">
-              <button className={btn.ghost} onClick={() => setEditing(null)}>Cancel</button>
-              <button className={btn.primary} onClick={save}>Save Changes</button>
-            </div>
+          )}
+
+          <div className="bg-white rounded-lg border border-rule overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-mist text-xs text-gray-500 uppercase">
+                <tr>
+                  <th className="px-4 py-3 text-left">Member #</th>
+                  <th className="px-4 py-3 text-left">Name</th>
+                  <th className="px-4 py-3 text-left hidden md:table-cell">Display Name</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-rule">
+                {filtered.map(m => (
+                  <tr key={m.id} className="hover:bg-mist/50">
+                    <td className="px-4 py-3 font-mono text-xs text-gray-500">{m.member_number}</td>
+                    <td className="px-4 py-3 font-medium text-ink">
+                      <div className="flex items-center gap-2">
+                        {m.profile_photo_path
+                          ? <img src={m.profile_photo_path} alt="" className="w-7 h-7 rounded-full object-cover" />
+                          : <div className="w-7 h-7 rounded-full bg-rule grid place-items-center text-gray-400 text-xs">?</div>
+                        }
+                        {m.full_name}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{m.preferred_display_name}</td>
+                    <td className="px-4 py-3">
+                      <Badge label={m.membership_status} colour={STATUS_BADGE[m.membership_status] ?? "bg-gray-100 text-gray-500"} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <button onClick={() => openEdit(m)} className="text-xs text-royal hover:underline">Edit</button>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={5} className="text-center py-8 text-gray-400">No members found.</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
-        </div>
+        </>
       )}
 
-      <div className="bg-white rounded-lg border border-rule overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-mist text-xs text-gray-500 uppercase">
-            <tr>
-              <th className="px-4 py-3 text-left">Member #</th>
-              <th className="px-4 py-3 text-left">Name</th>
-              <th className="px-4 py-3 text-left">Display Name</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-left"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-rule">
-            {filtered.map(m => (
-              <tr key={m.id} className="hover:bg-mist/50">
-                <td className="px-4 py-3 font-mono text-xs text-gray-500">{m.member_number}</td>
-                <td className="px-4 py-3 font-medium text-ink">
-                  <div className="flex items-center gap-2">
-                    {m.profile_photo_path
-                      ? <img src={m.profile_photo_path} alt="" className="w-7 h-7 rounded-full object-cover" />
-                      : <div className="w-7 h-7 rounded-full bg-rule grid place-items-center text-gray-400 text-xs">?</div>
-                    }
-                    {m.full_name}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-gray-600">{m.preferred_display_name}</td>
-                <td className="px-4 py-3">
-                  <Badge label={m.membership_status} colour={STATUS_BADGE[m.membership_status] ?? "bg-gray-100 text-gray-500"} />
-                </td>
-                <td className="px-4 py-3">
-                  <button onClick={() => openEdit(m)} className="text-xs text-royal hover:underline">Edit</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* ── Tab: Add / Invite ── */}
+      {tab === "add" && (
+        <div className="space-y-8">
+
+          {/* Section A — Invite by email */}
+          <section className="bg-white border border-rule rounded-lg p-6">
+            <h3 className="font-display text-lg text-ink mb-1">Invite a Member by Email</h3>
+            <p className="text-sm text-gray-500 mb-5">
+              Creates the member record and sends an invite email with a login link.
+              The member sets their own password on first sign-in.
+            </p>
+
+            {inviteDone && (
+              <div className="mb-4 rounded border border-green-200 bg-green-50 text-green-800 text-sm px-4 py-3">
+                ✓ Invite sent! (mock) The member was added to the list.
+              </div>
+            )}
+            {inviteErr && (
+              <div className="mb-4 rounded border border-red-200 bg-red-50 text-red-700 text-sm px-4 py-3">
+                {inviteErr}
+              </div>
+            )}
+
+            <form onSubmit={handleInvite} className="grid sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <FormField label="Full Name *">
+                  <input required className={inp} value={inviteForm.full_name}
+                    onChange={e => { setInviteDone(false); setInviteForm({...inviteForm, full_name: e.target.value}); }} />
+                </FormField>
+              </div>
+              <FormField label="Email Address *">
+                <input required type="email" className={inp} value={inviteForm.email}
+                  onChange={e => { setInviteDone(false); setInviteForm({...inviteForm, email: e.target.value}); }} />
+              </FormField>
+              <FormField label="Display Name">
+                <input className={inp} placeholder="e.g. Bro. Emmanuel" value={inviteForm.preferred_display_name}
+                  onChange={e => setInviteForm({...inviteForm, preferred_display_name: e.target.value})} />
+              </FormField>
+              <FormField label="Phone">
+                <input className={inp} value={inviteForm.phone}
+                  onChange={e => setInviteForm({...inviteForm, phone: e.target.value})} />
+              </FormField>
+              <div className="sm:col-span-2 flex justify-end">
+                <button type="submit" className={btn.primary}>Send Invite Email</button>
+              </div>
+            </form>
+          </section>
+
+          {/* Section B — Manual add (no login) */}
+          <section className="bg-white border border-rule rounded-lg p-6">
+            <h3 className="font-display text-lg text-ink mb-1">Add Member Manually</h3>
+            <p className="text-sm text-gray-500 mb-5">
+              Creates a member record without sending any email. Useful for existing members
+              who don't need a login account yet.
+            </p>
+
+            {addErr && (
+              <div className="mb-4 rounded border border-red-200 bg-red-50 text-red-700 text-sm px-4 py-3">
+                {addErr}
+              </div>
+            )}
+
+            <form onSubmit={handleAdd} className="grid sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <FormField label="Full Name *">
+                  <input required className={inp} value={addForm.full_name}
+                    onChange={e => { setAddErr(""); setAddForm({...addForm, full_name: e.target.value}); }} />
+                </FormField>
+              </div>
+              <FormField label="Display Name">
+                <input className={inp} placeholder="e.g. Sis. Amaka" value={addForm.preferred_display_name}
+                  onChange={e => setAddForm({...addForm, preferred_display_name: e.target.value})} />
+              </FormField>
+              <FormField label="Status">
+                <select className={`${inp} bg-white`} value={addForm.membership_status}
+                  onChange={e => setAddForm({...addForm, membership_status: e.target.value})}>
+                  {["active","pending","inactive","transferred","deceased"].map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label="Email">
+                <input type="email" className={inp} value={addForm.email}
+                  onChange={e => setAddForm({...addForm, email: e.target.value})} />
+              </FormField>
+              <FormField label="Phone">
+                <input className={inp} value={addForm.phone}
+                  onChange={e => setAddForm({...addForm, phone: e.target.value})} />
+              </FormField>
+              <FormField label="Date of Birth">
+                <input type="date" className={inp} value={addForm.date_of_birth}
+                  onChange={e => setAddForm({...addForm, date_of_birth: e.target.value})} />
+              </FormField>
+              <FormField label="Date Joined">
+                <input type="date" className={inp} value={addForm.date_joined}
+                  onChange={e => setAddForm({...addForm, date_joined: e.target.value})} />
+              </FormField>
+              <div className="sm:col-span-2 flex justify-end gap-3">
+                <button type="button" className={btn.ghost}
+                  onClick={() => { setAddForm(EMPTY_ADD); setAddErr(""); }}>
+                  Clear
+                </button>
+                <button type="submit" className={btn.primary}>Add Member</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

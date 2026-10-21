@@ -67,6 +67,11 @@ class MemberOut(BaseModel):
     profile_photo_path: str | None = None
     profile_photo_status: str
     date_joined: date | None = None
-    date_of_birth: date | None = None  # only with members:read_sensitive
+    # Sensitive — only returned to profiles with members:read_sensitive
+    date_of_birth: date | None = None
     phone: str | None = None
     email: str | None = None
+    address: str | None = None
+    # Role / login info
+    role: str | None = None          # e.g. "secretary", "member", "pastor"
+    has_login: bool = False          # True when a profiles row is linked
