@@ -8,7 +8,7 @@ export default function SiteFooter({ s }: { s: SiteSettings }) {
     <footer className="mt-20 border-t-4 border-gold bg-navy text-white/85">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 text-[15px] md:grid-cols-[1.3fr_1fr_1fr]">
         <div className="flex gap-4">
-          <Logo size={64} className="shrink-0" />
+          <Logo size={96} className="shrink-0 self-start" />
           <div>
             <p className="font-display text-xl font-extrabold text-white">{CHURCH.name}</p>
             <p className="font-semibold text-gold">{CHURCH.tag}</p>
