@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
+import { getToken } from "@/lib/auth";
 import { adminApi } from "@/lib/api";
 import Avatar from "@/components/Avatar";
 import type { Member } from "@/lib/types";
 
-export default function AdminMembers({ token }: { token: string }) {
+function AdminMembersInner({ token }: { token: string }) {
   const api = adminApi(token);
   const [members, setMembers] = useState<Member[]>([]);
   const [search, setSearch] = useState("");
@@ -87,4 +88,15 @@ export default function AdminMembers({ token }: { token: string }) {
       )}
     </div>
   );
+}
+
+export default function AdminMembers() {
+  const [token, setToken] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  useEffect(() => {
+    getToken().then((t) => { setToken(t); setAuthReady(true); });
+  }, []);
+  if (!authReady) return <p className="text-gray-400 text-center py-12">Loading…</p>;
+  if (!token) return <p className="text-red-500 text-center py-12">Not authenticated.</p>;
+  return <AdminMembersInner token={token} />;
 }

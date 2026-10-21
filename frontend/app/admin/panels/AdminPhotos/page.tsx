@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { getToken } from "@/lib/auth";
 import { adminApi, photoUrl } from "@/lib/api";
 
 type Submission = {
@@ -7,7 +8,7 @@ type Submission = {
   file_path: string; status: string; submitted_at: string;
 };
 
-export default function AdminPhotos({ token }: { token: string }) {
+function AdminPhotosInner({ token }: { token: string }) {
   const api = adminApi(token);
   const [photos, setPhotos] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,4 +66,15 @@ export default function AdminPhotos({ token }: { token: string }) {
       )}
     </div>
   );
+}
+
+export default function AdminPhotos() {
+  const [token, setToken] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  useEffect(() => {
+    getToken().then((t) => { setToken(t); setAuthReady(true); });
+  }, []);
+  if (!authReady) return <p className="text-gray-400 text-center py-12">Loading…</p>;
+  if (!token) return <p className="text-red-500 text-center py-12">Not authenticated.</p>;
+  return <AdminPhotosInner token={token} />;
 }

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { getToken } from "@/lib/auth";
 import { adminApi } from "@/lib/api";
 import Avatar from "@/components/Avatar";
 
@@ -16,7 +17,7 @@ type Overview = {
   consent_not_recorded: Array<{ id: string; member_number: string; full_name: string }>;
 };
 
-export default function AdminBirthdays({ token }: { token: string }) {
+function AdminBirthdaysInner({ token }: { token: string }) {
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -131,4 +132,15 @@ export default function AdminBirthdays({ token }: { token: string }) {
       )}
     </div>
   );
+}
+
+export default function AdminBirthdays() {
+  const [token, setToken] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  useEffect(() => {
+    getToken().then((t) => { setToken(t); setAuthReady(true); });
+  }, []);
+  if (!authReady) return <p className="text-gray-400 text-center py-12">Loading…</p>;
+  if (!token) return <p className="text-red-500 text-center py-12">Not authenticated.</p>;
+  return <AdminBirthdaysInner token={token} />;
 }

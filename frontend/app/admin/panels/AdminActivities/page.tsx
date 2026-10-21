@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { getToken } from "@/lib/auth";
 import { adminApi } from "@/lib/api";
 import type { Activity } from "@/lib/types";
 
@@ -16,7 +17,7 @@ const BLANK = {
   occurrence_status: "scheduled",
 };
 
-export default function AdminActivities({ token }: { token: string }) {
+function AdminActivitiesInner({ token }: { token: string }) {
   const api = adminApi(token);
   const [acts, setActs]   = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -178,4 +179,15 @@ export default function AdminActivities({ token }: { token: string }) {
       )}
     </div>
   );
+}
+
+export default function AdminActivities() {
+  const [token, setToken] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  useEffect(() => {
+    getToken().then((t) => { setToken(t); setAuthReady(true); });
+  }, []);
+  if (!authReady) return <p className="text-gray-400 text-center py-12">Loading…</p>;
+  if (!token) return <p className="text-red-500 text-center py-12">Not authenticated.</p>;
+  return <AdminActivitiesInner token={token} />;
 }

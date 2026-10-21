@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
+import { getToken } from "@/lib/auth";
 import { adminApi } from "@/lib/api";
 
-export default function AdminDepartments({ token }: { token: string }) {
+function AdminDepartmentsInner({ token }: { token: string }) {
   const api = adminApi(token);
   const [depts, setDepts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,4 +98,14 @@ export default function AdminDepartments({ token }: { token: string }) {
       )}
     </div>
   );
+}
+export default function AdminDepartments() {
+  const [token, setToken] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  useEffect(() => {
+    getToken().then((t) => { setToken(t); setAuthReady(true); });
+  }, []);
+  if (!authReady) return <p className="text-gray-400 text-center py-12">Loading…</p>;
+  if (!token) return <p className="text-red-500 text-center py-12">Not authenticated.</p>;
+  return <AdminDepartmentsInner token={token} />;
 }
