@@ -1,9 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, EmailStr
+from datetime import date
 
 from app.api.deps import current_profile
 from app.core.db import get_conn
 from app.schemas.members import BirthdayPrefs, PhotoSubmissionIn
 from app.services.audit import audit
+
+
+class ProfileEditRequestIn(BaseModel):
+    full_name: str | None = None
+    preferred_display_name: str | None = None
+    phone: str | None = None
+    email: EmailStr | None = None
+    address: str | None = None
+    date_of_birth: date | None = None
+    request_notes: str | None = None
 
 router = APIRouter(prefix="/api/me", tags=["member portal"])
 
@@ -43,6 +55,64 @@ async def update_prefs(body: BirthdayPrefs, profile=Depends(current_profile),
               consent_recorded_at=now()""", m["id"], *d.values())
     await audit(conn, profile["id"], "birthday_prefs.self_update", "member", m["id"])
     return {"ok": True}
+
+
+@router.get("/edit-requests")
+async def my_edit_requests(profile=Depends(current_profile), conn=Depends(get_conn)):
+    """Return this member's own edit requests, newest first."""
+    m = await _my_member(conn, profile)
+    rows = await conn.fetch(
+        """select id, full_name, preferred_display_name, phone, email, address,
+                  date_of_birth, request_notes, status, reviewed_at, review_notes, created_at
+             from member_profile_edit_requests
+            where member_id = $1
+            order by created_at desc""",
+        m["id"],
+    )
+    return [dict(r) for r in rows]
+
+
+@router.post("/edit-request", status_code=201)
+async def submit_edit_request(
+    body: ProfileEditRequestIn,
+    profile=Depends(current_profile),
+    conn=Depends(get_conn),
+):
+    """Submit a profile-change request for admin approval.
+    At least one field must be provided (other than request_notes).
+    Only one pending request per member is allowed at a time.
+    """
+    m = await _my_member(conn, profile)
+
+    # Must have at least one field to change
+    editable = {k: v for k, v in body.model_dump().items()
+                if k != "request_notes" and v is not None}
+    if not editable:
+        raise HTTPException(422, "Provide at least one field to change.")
+
+    # Reject if there is already a pending request
+    existing = await conn.fetchrow(
+        "select id from member_profile_edit_requests "
+        "where member_id = $1 and status = 'pending'",
+        m["id"],
+    )
+    if existing:
+        raise HTTPException(409, "You already have a pending edit request. "
+                                 "Please wait for it to be reviewed.")
+
+    row = await conn.fetchrow(
+        """insert into member_profile_edit_requests
+             (member_id, submitted_by, full_name, preferred_display_name,
+              phone, email, address, date_of_birth, request_notes)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           returning id, status, created_at""",
+        m["id"], profile["id"],
+        body.full_name, body.preferred_display_name, body.phone,
+        str(body.email) if body.email else None,
+        body.address, body.date_of_birth, body.request_notes,
+    )
+    await audit(conn, profile["id"], "edit_request.submit", "member", m["id"])
+    return dict(row)
 
 
 @router.post("/photo-submissions", status_code=201)

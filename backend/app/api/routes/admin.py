@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from app.api.deps import require
 from app.core.db import get_conn
@@ -8,6 +9,11 @@ from app.schemas.members import PhotoReviewIn
 from app.services import birthdays as bday
 from app.services.audit import audit
 from app.services.settings import church_today, get_settings
+
+
+class EditRequestReviewIn(BaseModel):
+    approve: bool
+    review_notes: str | None = None
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -134,3 +140,78 @@ async def reject_registration(req_id: UUID, profile=Depends(require("registratio
 def _date(v):
     from datetime import date
     return date.fromisoformat(v) if v else None
+
+
+# ── Profile edit requests ─────────────────────────────────────
+
+@router.get("/edit-requests")
+async def list_edit_requests(
+    status: str = "pending",
+    profile=Depends(require("members:write")),
+    conn=Depends(get_conn),
+):
+    """List member profile-edit requests by status (default: pending)."""
+    rows = await conn.fetch(
+        """select r.id, r.member_id, m.full_name as current_full_name,
+                  m.member_number,
+                  r.full_name, r.preferred_display_name, r.phone, r.email,
+                  r.address, r.date_of_birth, r.request_notes,
+                  r.status, r.reviewed_at, r.review_notes, r.created_at
+             from member_profile_edit_requests r
+             join members m on m.id = r.member_id
+            where r.status = $1
+            order by r.created_at""",
+        status,
+    )
+    return [dict(r) for r in rows]
+
+
+@router.post("/edit-requests/{req_id}/review")
+async def review_edit_request(
+    req_id: UUID,
+    body: EditRequestReviewIn,
+    profile=Depends(require("members:write")),
+    conn=Depends(get_conn),
+):
+    """Approve or reject a profile-edit request.
+    On approval the changed fields are written directly to the members table.
+    """
+    async with conn.transaction():
+        req = await conn.fetchrow(
+            "select * from member_profile_edit_requests "
+            "where id = $1 and status = 'pending' for update",
+            req_id,
+        )
+        if not req:
+            raise HTTPException(404, "No pending edit request with that id")
+
+        new_status = "approved" if body.approve else "rejected"
+        await conn.execute(
+            """update member_profile_edit_requests
+                  set status=$2, reviewed_by=$3, reviewed_at=now(), review_notes=$4
+                where id=$1""",
+            req_id, new_status, profile["id"], body.review_notes,
+        )
+
+        if body.approve:
+            # Build dynamic UPDATE for only the non-null requested fields
+            EDITABLE = ("full_name", "preferred_display_name", "phone",
+                        "email", "address", "date_of_birth")
+            updates = {col: req[col] for col in EDITABLE if req[col] is not None}
+            if updates:
+                sets = ", ".join(f"{k} = ${i+2}" for i, k in enumerate(updates))
+                await conn.execute(
+                    f"update members set {sets} where id = $1",
+                    req["member_id"], *updates.values(),
+                )
+            await audit(
+                conn, profile["id"], "edit_request.approve",
+                "member", req["member_id"], {"request_id": str(req_id)},
+            )
+        else:
+            await audit(
+                conn, profile["id"], "edit_request.reject",
+                "member", req["member_id"], {"request_id": str(req_id)},
+            )
+
+    return {"status": new_status}

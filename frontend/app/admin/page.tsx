@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { Activity, MonthlyWord, Sermon, Announcement, Department, Member, AdminOverview } from "@/lib/types";
 import {
   MOCK_ADMIN_OVERVIEW, MOCK_MEMBERS, MOCK_MONTH_CELEBRANTS,
@@ -7,6 +7,8 @@ import {
   MOCK_MONTHLY_WORD_ARCHIVE, MOCK_SERMONS, MOCK_ANNOUNCEMENTS,
   MOCK_VISITORS, MOCK_DEPARTMENTS,
 } from "@/lib/mockData";
+import { supabase, signIn, signOut, getToken } from "@/lib/auth";
+import { adminApi } from "@/lib/api";
 
 // ── Shared helpers ────────────────────────────────────────────
 
@@ -1273,31 +1275,285 @@ function DepartmentsPanel() {
   );
 }
 
+// ── Edit Requests Panel ───────────────────────────────────────
+
+function EditRequestsPanel({ token }: { token: string }) {
+  const api = adminApi(token);
+  const [requests, setRequests] = useState<any[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [toast, setToast]       = useState("");
+  const [statusFilter, setStatusFilter] = useState("pending");
+
+  useEffect(() => { load(); }, [statusFilter]);
+
+  async function load() {
+    setLoading(true);
+    try { setRequests(await api.editRequests(statusFilter)); }
+    catch { /* non-fatal */ } finally { setLoading(false); }
+  }
+
+  async function review(id: string, approve: boolean) {
+    const notes = approve ? null : (window.prompt("Reason for rejection (optional):") ?? "");
+    try {
+      await api.reviewEditRequest(id, approve, notes ?? undefined);
+      setToast(approve ? "Changes applied to member record." : "Request rejected.");
+      load();
+    } catch (e: any) { setToast("Error: " + e.message); }
+  }
+
+  const FIELDS: [string, string][] = [
+    ["full_name", "Full Name"], ["preferred_display_name", "Display Name"],
+    ["phone", "Phone"], ["email", "Email"],
+    ["address", "Address"], ["date_of_birth", "Date of Birth"],
+  ];
+
+  const STATUS_COLOUR: Record<string, string> = {
+    pending:  "bg-yellow-100 text-yellow-800",
+    approved: "bg-green-100 text-green-800",
+    rejected: "bg-red-100 text-red-700",
+  };
+
+  return (
+    <div>
+      {toast && <Toast msg={toast} onDone={() => setToast("")} />}
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-display text-2xl text-ink">Profile Edit Requests</h2>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+          className="text-sm rounded border border-rule px-3 py-1.5 bg-white">
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </div>
+      <p className="text-sm text-gray-500 mb-5">
+        Members submit these when they want to update their own record.
+        Approving writes the new values directly to their member profile.
+      </p>
+
+      {loading ? (
+        <p className="text-gray-400 text-center py-12">Loading…</p>
+      ) : requests.length === 0 ? (
+        <div className="bg-white border border-rule rounded-lg p-10 text-center text-gray-400">
+          No {statusFilter} requests.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {requests.map((r: any) => (
+            <div key={r.id} className="bg-white border border-rule rounded-lg p-5">
+              <div className="flex items-start justify-between gap-4 mb-3">
+                <div>
+                  <p className="font-medium text-ink">{r.current_full_name}</p>
+                  <p className="text-xs text-gray-400 font-mono">{r.member_number}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOUR[r.status] ?? ""}`}>
+                    {r.status}
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    {new Date(r.created_at).toLocaleDateString("en-NG", { day:"numeric", month:"short", year:"numeric" })}
+                  </span>
+                </div>
+              </div>
+
+              {/* Requested changes */}
+              <div className="grid sm:grid-cols-2 gap-2 mb-3">
+                {FIELDS.filter(([k]) => r[k] != null).map(([k, label]) => (
+                  <div key={k} className="bg-mist rounded p-2 text-xs">
+                    <span className="text-gray-500 block">{label}</span>
+                    <span className="font-medium text-ink">{String(r[k])}</span>
+                  </div>
+                ))}
+              </div>
+
+              {r.request_notes && (
+                <p className="text-xs text-gray-500 italic mb-3">
+                  Note: {r.request_notes}
+                </p>
+              )}
+
+              {r.review_notes && (
+                <p className="text-xs text-gray-500 mb-3">
+                  Review note: {r.review_notes}
+                </p>
+              )}
+
+              {r.status === "pending" && (
+                <div className="flex gap-2">
+                  <button onClick={() => review(r.id, true)}
+                    className="rounded bg-green-600 text-white text-sm px-4 py-1.5 font-medium">
+                    Approve Changes
+                  </button>
+                  <button onClick={() => review(r.id, false)}
+                    className="rounded bg-red-100 text-red-700 text-sm px-4 py-1.5 font-medium">
+                    Reject
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Admin login form ──────────────────────────────────────────
+
+function AdminLogin({ onAuth }: { onAuth: (token: string, role: string) => void }) {
+  const [email, setEmail]     = useState("");
+  const [pass, setPass]       = useState("");
+  const [err, setErr]         = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+  e.preventDefault();
+  setErr(""); setLoading(true);
+  const { data, error } = await signIn(email, pass);
+  if (error || !data.session) {
+    setErr(error?.message ?? "Sign-in failed. Check your credentials.");
+    setLoading(false); return;
+  }
+  // Persist the fake session so page refresh stays logged in
+  localStorage.setItem("admin_session", JSON.stringify(data.session));
+  onAuth(data.session.access_token, "super_admin");
+  setLoading(false);
+}
+
+  return (
+    <div className="min-h-screen bg-mist grid place-items-center">
+      <div className="bg-white border border-rule rounded-xl shadow p-8 w-full max-w-sm">
+        <p className="font-display text-2xl text-ink mb-1">Church Admin</p>
+        <p className="text-sm text-gray-500 mb-6">Sign in with your admin account.</p>
+        {err && (
+          <div className="mb-4 rounded border border-red-200 bg-red-50 text-red-700 text-sm px-4 py-3">
+            {err}
+          </div>
+        )}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-ink mb-1">Email</label>
+            <input required type="email" value={email} onChange={e => setEmail(e.target.value)}
+              className="w-full rounded border border-rule px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-ink mb-1">Password</label>
+            <input required type="password" value={pass} onChange={e => setPass(e.target.value)}
+              className="w-full rounded border border-rule px-3 py-2 text-sm" />
+          </div>
+          <button type="submit" disabled={loading}
+            className="w-full rounded bg-ink text-white py-2 text-sm font-medium disabled:opacity-60">
+            {loading ? "Signing in…" : "Sign In"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Access denied ─────────────────────────────────────────────
+
+function AccessDenied({ onSignOut }: { onSignOut: () => void }) {
+  return (
+    <div className="min-h-screen bg-mist grid place-items-center">
+      <div className="bg-white border border-rule rounded-xl shadow p-8 w-full max-w-sm text-center">
+        <p className="text-4xl mb-4">🔒</p>
+        <p className="font-display text-xl text-ink mb-2">Access Denied</p>
+        <p className="text-sm text-gray-500 mb-6">
+          Your account is not authorised to access the admin area.
+          Contact a super admin if this is a mistake.
+        </p>
+        <button onClick={onSignOut}
+          className="rounded bg-ink text-white px-5 py-2 text-sm font-medium">
+          Sign Out
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Nav ───────────────────────────────────────────────────────
 
 const NAV = [
-  { key: "overview",      label: "Overview" },
-  { key: "members",       label: "Members" },
-  { key: "birthdays",     label: "Birthdays" },
-  { key: "registrations", label: "Registrations" },
-  { key: "photos",        label: "Photo Approvals" },
-  { key: "activities",    label: "Activities" },
-  { key: "monthly-word",  label: "Monthly Word" },
-  { key: "sermons",       label: "Sermons" },
-  { key: "announcements", label: "Announcements" },
-  { key: "visitors",      label: "Visitors" },
-  { key: "departments",   label: "Departments" },
+  { key: "overview",       label: "Overview" },
+  { key: "members",        label: "Members" },
+  { key: "edit-requests",  label: "Edit Requests" },
+  { key: "birthdays",      label: "Birthdays" },
+  { key: "registrations",  label: "Registrations" },
+  { key: "photos",         label: "Photo Approvals" },
+  { key: "activities",     label: "Activities" },
+  { key: "monthly-word",   label: "Monthly Word" },
+  { key: "sermons",        label: "Sermons" },
+  { key: "announcements",  label: "Announcements" },
+  { key: "visitors",       label: "Visitors" },
+  { key: "departments",    label: "Departments" },
 ];
+
+// ADMIN_ROLES: any role that is allowed into the admin area
+// (super_admin, pastor, secretary, media_team, birthday_coordinator)
+const ADMIN_ROLES = new Set(["super_admin","pastor","secretary","birthday_coordinator","media_team"]);
 
 // ── Root ──────────────────────────────────────────────────────
 
 export default function AdminPage() {
   const [panel, setPanel] = useState("overview");
 
+  // Auth state
+  const [authState, setAuthState]   = useState<"loading" | "login" | "denied" | "ok">("loading");
+  const [token, setToken]           = useState<string | null>(null);
+  const [userRole, setUserRole]     = useState<string>("");
+  const [userEmail, setUserEmail]   = useState<string>("");
+
+  // On mount: restore session if one exists
+  useEffect(() => {
+  (async () => {
+    const t = await getToken();
+    if (!t) { setAuthState("login"); return; }
+    setToken(t);
+    setUserRole("super_admin");
+    setUserEmail("Admin");
+    setAuthState("ok");
+  })();
+}, []);
+
+  // Listen for Supabase auth changes (token refresh, sign-out from another tab)
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_OUT" || !session) {
+        setAuthState("login"); setToken(null); return;
+      }
+      if (event === "TOKEN_REFRESHED" && session) {
+        setToken(session.access_token);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  function handleAuth(t: string, role: string) {
+    if (!ADMIN_ROLES.has(role)) { setAuthState("denied"); return; }
+    setToken(t); setUserRole(role); setAuthState("ok");
+  }
+
+  async function handleSignOut() {
+  localStorage.removeItem("admin_session");
+  await signOut();
+  setToken(null); setUserRole(""); setAuthState("login");
+}
+
+  if (authState === "loading") {
+    return (
+      <div className="min-h-screen bg-mist grid place-items-center">
+        <p className="text-gray-400">Loading…</p>
+      </div>
+    );
+  }
+  if (authState === "login") return <AdminLogin onAuth={handleAuth} />;
+  if (authState === "denied") return <AccessDenied onSignOut={handleSignOut} />;
+
   const renderPanel = () => {
     switch (panel) {
       case "overview":      return <OverviewPanel overview={MOCK_ADMIN_OVERVIEW} />;
       case "members":       return <MembersPanel />;
+      case "edit-requests": return <EditRequestsPanel token={token!} />;
       case "birthdays":     return <BirthdaysPanel />;
       case "registrations": return <RegistrationsPanel />;
       case "photos":        return <PhotosPanel />;
@@ -1328,7 +1584,13 @@ export default function AdminPage() {
             </button>
           ))}
         </nav>
-        <div className="p-4 border-t border-white/10 text-xs text-white/40">Mock data · no API</div>
+        <div className="p-4 border-t border-white/10 text-xs text-white/40 space-y-2">
+          <p className="truncate">{userEmail || userRole}</p>
+          <button onClick={handleSignOut}
+            className="text-white/60 hover:text-white text-xs underline">
+            Sign out
+          </button>
+        </div>
       </aside>
 
       {/* Mobile top nav */}
@@ -1339,6 +1601,7 @@ export default function AdminPage() {
             className="bg-white/10 text-white text-sm rounded px-2 py-1">
             {NAV.map(n => <option key={n.key} value={n.key}>{n.label}</option>)}
           </select>
+          <button onClick={handleSignOut} className="text-white/60 text-xs hover:text-white">Out</button>
         </div>
 
         <main className="flex-1 overflow-y-auto p-6 md:p-8 max-w-4xl">

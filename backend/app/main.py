@@ -9,6 +9,7 @@ from app.api.routes.members import router as members_router
 from app.api.routes.admin import router as admin_router
 from app.api.routes.admin_content import router as admin_content_router
 from app.api.routes.me import router as me_router
+from app.api.routes.members_ext import router as members_ext_router
 
 
 @asynccontextmanager
@@ -33,6 +34,7 @@ app.include_router(members_router,      prefix="/api/members", tags=["members"])
 app.include_router(admin_router,        prefix="/api",         tags=["admin"])
 app.include_router(admin_content_router,prefix="/api",         tags=["admin-content"])
 app.include_router(me_router,           prefix="/api/me",      tags=["me"])
+app.include_router(members_ext_router,  prefix="/api",         tags=["admin-members"])
 
 
 @app.get("/health")

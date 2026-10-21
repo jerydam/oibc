@@ -87,6 +87,44 @@ export const api = {
     }).then((r) => r.json()),
 };
 
+// ── Member Portal API (requires bearer token) ───────────────
+
+export function memberApi(token: string) {
+  const h = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const me = (path: string, init?: RequestInit) =>
+    fetch(`${BASE}/me${path}`, { headers: h, ...init });
+
+  return {
+    /** Load the signed-in member's full profile + birthday preferences */
+    me: () => me("").then((r) => r.json()),
+
+    /** Update birthday display preferences */
+    saveBirthdayPrefs: (prefs: object) =>
+      me("/birthday-preferences", { method: "PUT", body: JSON.stringify(prefs) }).then((r) => r.json()),
+
+    /** Get all edit requests submitted by this member */
+    myEditRequests: () => me("/edit-requests").then((r) => r.json()),
+
+    /** Submit a new profile-edit request for admin approval */
+    submitEditRequest: (data: {
+      full_name?: string;
+      preferred_display_name?: string;
+      phone?: string;
+      email?: string;
+      address?: string;
+      date_of_birth?: string;
+      request_notes?: string;
+    }) =>
+      me("/edit-request", { method: "POST", body: JSON.stringify(data) }).then(async (r) => {
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err?.detail ?? `Error ${r.status}`);
+        }
+        return r.json();
+      }),
+  };
+}
+
 // ── Admin API (requires bearer token) ───────────────────────
 
 export function adminApi(token: string) {
@@ -208,6 +246,15 @@ export function adminApi(token: string) {
         `/departments?name=${encodeURIComponent(name)}${description ? `&description=${encodeURIComponent(description)}` : ""}${meeting_schedule ? `&meeting_schedule=${encodeURIComponent(meeting_schedule)}` : ""}`,
         { method: "POST" }
       ).then((r) => r.json()),
+
+    // ── Profile edit requests ─────────────────────────────────
+    editRequests: (status?: string) =>
+      adm(`/edit-requests${status ? `?status=${status}` : ""}`).then((r) => r.json()),
+    reviewEditRequest: (id: string, approve: boolean, review_notes?: string) =>
+      adm(`/edit-requests/${id}/review`, {
+        method: "POST",
+        body: JSON.stringify({ approve, review_notes: review_notes ?? null }),
+      }).then((r) => r.json()),
 
     // ── Visitors ──────────────────────────────────────────────
     visitors: (status?: string) =>
